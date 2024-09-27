@@ -7,6 +7,7 @@ const axios = require('axios');
 const https = require('https'); // Importer le module HTTPS
 const fs = require('fs'); // Importer le module FS
 const { createProxyMiddleware } = require('http-proxy-middleware');
+require('dotenv').config({ path: '../.env' }); // Charger le fichier .env à la racine
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // Ignorer les erreurs de certificat
 
@@ -63,7 +64,7 @@ async function getYouTubeVideoTitle(videoUrl) {
         return null;
     }
 
-    const apiKey = 'AIzaSyAOxhKaJJVjK6iUA3NPNQdjRzXTA_tHu04';  // Replace with your YouTube API key
+    const apiKey = process.env.REACT_APP_YOUTUBE_API_KEY; // Replace with your YouTube API key
     const apiUrl = `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&key=${apiKey}&part=snippet`;
 
     try {
