@@ -1,19 +1,14 @@
 import React from 'react';
 import axios from 'axios';
 //import https from 'https'; // Importer le module https
+import { PlayIcon } from '@heroicons/react/24/solid'; // Importer l'icône Play de Heroicons v2
 
 const PlayVideoButton = ({ youtubeUrl, onLog }) => {
+    const BACKEND_URL = process.env.REACT_APP_SERVER_HOST+":"+process.env.REACT_APP_BACKEND_PORT;
     const playVideoOnRemoteDevice = () => {
         if (youtubeUrl) {
-            const remoteUrl = `https://192.168.1.14:3001/lms/anyurl?p0=playlist&p1=play&p2=${encodeURIComponent(youtubeUrl)}`;
+            const remoteUrl = BACKEND_URL+`/lms-play?content=${encodeURIComponent(youtubeUrl)}`;
             
-            /*
-            // Configurer Axios pour ignorer les erreurs de certificat
-            const agent = new https.Agent({  
-                rejectUnauthorized: false // Ignorer les erreurs de certificat
-            });
-            */
-
             // Effectuer une requête pour lire la vidéo sur le périphérique distant
             //axios.get(remoteUrl, { httpsAgent: agent })
             axios.get(remoteUrl, )
@@ -30,7 +25,15 @@ const PlayVideoButton = ({ youtubeUrl, onLog }) => {
     };
 
     return (
-        <button onClick={playVideoOnRemoteDevice}>Lire la vidéo sur le périphérique distant</button>
+        <button onClick={playVideoOnRemoteDevice}>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.91 11.672a.375.375 0 0 1 0 .656l-5.603 3.113a.375.375 0 0 1-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112Z" />
+            </svg>
+
+            
+        </button>
+
     );
 };
 

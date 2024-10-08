@@ -14,6 +14,8 @@ module.exports = {
             http: require.resolve('stream-http'),
             stream: require.resolve('stream-browserify'),
             buffer: require.resolve('buffer/'),
+            path: require.resolve("path-browserify"),
+            // Ajoutez d'autres polyfills si nécessaire
         },
     },
     module: {

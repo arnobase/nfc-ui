@@ -12,7 +12,6 @@ require('dotenv').config({ path: '../.env' }); // Charger le fichier .env à la 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // Ignorer les erreurs de certificat
 
 const app = express();
-const port = 3001;  // Port du serveur
 
 // Charger le certificat et la clé
 const options = {
@@ -26,9 +25,9 @@ console.log(options);
 app.use(cors());  // Utiliser le middleware CORS
 app.use(bodyParser.json());
 
-// Proxifier les requêtes vers le serveur LMS
+// Proxifier les requêtes vers le serveur LMS afin de les apeller en https
 app.use('/lms', createProxyMiddleware({
-    target: 'http://192.168.1.29:9000', // Utiliser HTTP pour l'adresse de votre serveur LMS
+    target: process.env.REACT_APP_LMS_HOST+":"+process.env.REACT_APP_LMS_PORT,
     changeOrigin: true,
     pathRewrite: {
         '^/lms': '', // Supprimer le préfixe /lms de l'URL
@@ -146,7 +145,70 @@ app.delete('/delete-association/:nfcId', (req, res) => {
     });
 });
 
+// Route pour jouer une vidéo sur le périphérique distant
+app.get('/lms-play', (req, res) => {
+    const content = req.query.content; // Récupérer le paramètre content de la requête
+
+    if (!content) {
+        return res.status(400).json({ error: 'Le paramètre content est requis.' });
+    }
+
+    // Construire l'URL pour le proxy
+    //req.url = `/lms/anyurl?p0=playlist&p1=play&p2=${encodeURIComponent(content)}`; // Modifier l'URL de la requête
+    req.url = `/lms/anyurl?p0=playlist&p1=play&p2=${encodeURIComponent(content)}`
+    // Appeler le middleware de proxy existant
+    // Note: Le middleware de proxy pour /lms doit déjà être configuré
+    // Passer la requête et la réponse au middleware de proxy existant
+    app._router.handle(req, res, () => {
+        res.status(404).send('Not Found');
+    });
+});
+
+// Route pour jouer une vidéo sur le périphérique distant en utilisant nfcId
+app.get('/lms-play-nfc/:nfcId', (req, res) => {
+    const nfcId = req.params.nfcId; // Récupérer le nfcId de la requête
+    console.log(req.params.nfcId);
+    // Requête pour récupérer l'URL de la vidéo à partir de la base de données
+    db.get('SELECT youtubeUrl, videoTitle FROM associations WHERE nfcId = ?', [nfcId], (err, row) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        if (!row) {
+            return res.status(404).json({ error: 'Association non trouvée pour ce nfcId.' });
+        }
+
+        const videoUrl = row.youtubeUrl; // Récupérer l'URL de la vidéo
+        const videoTitle = row.videoTitle;
+        
+        // Rediriger vers /lms-play avec le paramètre content
+        //res.redirect(`${host}:${port}/lms-play?content=${encodeURIComponent(videoUrl)}`);
+
+
+        // Construire l'URL pour le proxy
+        //req.url = `/lms/anyurl?p0=playlist&p1=play&p2=${encodeURIComponent(content)}`; // Modifier l'URL de la requête
+        console.log(`appel de l'URL : ${videoUrl} `)
+        req.url = `/lms/anyurl?p0=playlist&p1=play&p2=${encodeURIComponent(videoUrl)}`
+        app._router.handle(req, res, () => {
+            res.status(404).send('Not Found');
+        });
+        console.log(`requête de lecture envoyée : ${videoTitle} `)
+
+        /*
+        // Construire l'URL pour le proxy
+        //req.url = `/lms/anyurl?p0=playlist&p1=play&p2=${encodeURIComponent(content)}`; // Modifier l'URL de la requête
+        req.url = `/lms-play?content=${encodeURIComponent(videoUrl)}`
+        // Appeler le middleware de proxy existant
+        // Note: Le middleware de proxy pour /lms doit déjà être configuré
+        // Passer la requête et la réponse au middleware de proxy existant
+        app._router.handle(req, res, () => {
+            res.status(404).send('Not Found');
+        });
+        */
+
+    });
+});
+
 // Démarrer le serveur HTTPS
-https.createServer(options, app).listen(port, () => {
-    console.log(`Serveur en cours d'exécution sur https://192.168.1.14:${port}`);
+https.createServer(options, app).listen(process.env.REACT_APP_BACKEND_PORT, () => {
+    console.log(`Serveur en cours d'exécution sur ${process.env.REACT_APP_SERVER_HOST}:${process.env.REACT_APP_BACKEND_PORT}`);
 });

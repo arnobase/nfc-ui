@@ -1,37 +1,34 @@
 import React, { useState, useEffect } from 'react';
+
 import NfcReader from './NfcReader'; // Importer le composant
 import LogDisplay from './LogDisplay'; // Importer le composant LogDisplay
 import PlayVideoButton from './PlayVideoButton'; // Importer le composant PlayVideoButton
 import AssociationsList from './AssociationsList'; // Importer le composant AssociationsList
 import axios from 'axios'; // Importer axios pour les requêtes HTTP
-//import https from 'https'; // Importer le module https
+import Button from './Button'; // Importer le composant Button
+//import { YOUTUBE_API_KEY } from '../config'; // Importer la clé API depuis le fichier de configuration
+
+
 
 function NfcAssociation() {
-  const [nfcId, setNfcId] = useState('');
+  const [nfcId, setNfcId] = useState(''); // Initialiser nfcId à une chaîne vide
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [messages, setMessages] = useState(''); // État pour stocker les messages
   const [associations, setAssociations] = useState([]); // État pour stocker les associations
+  const [isScanning, setIsScanning] = useState(false); // État pour gérer la lecture NFC
+  const [selectedResultId, setSelectedResultId] = useState(null); // État pour l'élément sélectionné
+
+  const BACKEND_URL = process.env.REACT_APP_SERVER_HOST+":"+process.env.REACT_APP_BACKEND_PORT;
 
   useEffect(() => {
-    setNfcId(generateRandomNfcId());
     fetchAssociations(); // Récupérer les associations au chargement du composant
   }, []);
 
-  const generateRandomNfcId = () => {
-    return 'NFC-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-  };
-
   const fetchAssociations = async () => {
     try {
-      /*
-      // Configurer Axios pour ignorer les erreurs de certificat
-      const agent = new https.Agent({  
-        rejectUnauthorized: false // Ignorer les erreurs de certificat
-      });
-    */
-      const response = await axios.get('https://192.168.1.14:3001/get-associations');
+      const response = await axios.get(BACKEND_URL+'/get-associations');
       setAssociations(response.data);
     } catch (error) {
       console.error('Erreur lors de la récupération des associations:', error);
@@ -49,7 +46,8 @@ function NfcAssociation() {
   };
 
   const searchYouTube = async () => {
-    const apiKey = 'AIzaSyAOxhKaJJVjK6iUA3NPNQdjRzXTA_tHu04';
+    const apiKey = process.env.REACT_APP_YOUTUBE_API_KEY;
+    console.log("apiKey", apiKey);
     const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${searchQuery}&type=video,playlist&key=${apiKey}`;
 
     try {
@@ -70,6 +68,7 @@ function NfcAssociation() {
       thumbnail: item.snippet.thumbnails.default.url,
       isVideo
     });
+    setSelectedResultId(item.id.videoId || item.id.playlistId); // Mettre à jour l'ID de l'élément sélectionné
   };
 
   const saveAssociation = async () => {
@@ -80,7 +79,7 @@ function NfcAssociation() {
       : `https://www.youtube.com/playlist?list=${selectedVideo.videoId}`;
 
     try {
-      const response = await fetch('https://192.168.1.14:3001/save-association', {
+      const response = await fetch(BACKEND_URL+'/save-association', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -89,52 +88,80 @@ function NfcAssociation() {
       });
       const data = await response.json();
       console.log('Association enregistrée:', data);
+      
       // Réinitialiser le formulaire après l'enregistrement
-      setNfcId(generateRandomNfcId());
+      setNfcId(''); // Réinitialiser nfcId à une chaîne vide
       setSearchQuery('');
       setSearchResults([]);
       setSelectedVideo(null);
-      fetchAssociations(); // Récupérer à nouveau les associations après l'enregistrement
+      setSelectedResultId(null); // Réinitialiser l'élément sélectionné
+      
+      // Récupérer à nouveau les associations après l'enregistrement
+      await fetchAssociations(); // Attendre que les associations soient récupérées
     } catch (error) {
       console.log('Erreur:', error);
     }
   };
 
   return (
-    <div>
-      <h1>Associer NFC à YouTube</h1>
-      <NfcReader pageLog={pageLog} onTagRead={handleTagRead} /> {/* Ajouter le composant NfcReader */}
-      <div>
-        <label htmlFor="nfc-id">Identifiant du tag NFC :</label>
-        <input type="text" id="nfc-id" value={nfcId} readOnly />
+    <div className="flex flex-col items-center"> {/* Centrer le contenu */}
+       {/* Ajouter le composant NfcReader */}
+      
+      {/* Alignement horizontal pour le NFC ID et le bouton */}
+      <div className="flex items-center mt-2"> 
+        <input 
+          type="text" 
+          id="nfc-id" 
+          value={nfcId} 
+          readOnly 
+          placeholder={isScanning ? "attente du NFC..." : ""} // Placeholder conditionnel
+          className="border border-gray-300 rounded-lg p-2 mr-2" // Champ texte pour le NFC ID
+        />
+        <NfcReader 
+          pageLog={pageLog} 
+          onTagRead={handleTagRead} 
+          isScanning={isScanning} 
+          setIsScanning={setIsScanning} 
+          setNfcId={setNfcId} // Passer setNfcId en prop
+        /> {/* Bouton pour démarrer la lecture NFC */}
       </div>
-      <div>
-        <label htmlFor="youtube-search">Rechercher sur YouTube :</label>
+
+      {/* Alignement horizontal pour la recherche YouTube */}
+      <div className="flex items-center mt-2"> 
         <input
           type="text"
           id="youtube-search"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Rechercher sur YouTube" // Déplacer le label ici
+          className="border border-gray-300 rounded-lg p-2 mr-2" // Ajouter un cadre autour de l'input de recherche
         />
-        <button onClick={searchYouTube}>Rechercher</button>
+        <Button onClick={searchYouTube}>Rechercher</Button>
       </div>
-      <div id="youtube-results">
-        {searchResults.map((item) => (
+
+      <div id="youtube-results" className="mt-2 w-full max-w-md"> {/* Conteneur pour les résultats */}
+        {searchResults.map((item, index) => (
           <div
             key={item.id.videoId || item.id.playlistId}
             onClick={() => selectResult(item)}
-            style={{ cursor: 'pointer', border: selectedVideo && selectedVideo.videoId === (item.id.videoId || item.id.playlistId) ? '2px solid blue' : 'none' }}
+            className={`flex items-center p-2 cursor-pointer ${selectedResultId === (item.id.videoId || item.id.playlistId) ? 'bg-gray-200' : ''}`} // Fond grisé pour l'élément sélectionné
           >
-            <h3>{item.snippet.title}</h3>
+            <img 
+              src={item.snippet.thumbnails.default.url} 
+              alt={item.snippet.title} 
+              className="w-12 h-12 mr-2 rounded" // Image miniature réduite
+            />
+            <h3 className="text-sm font-semibold">{item.snippet.title}</h3> {/* Taille de texte réduite */}
+            {index < searchResults.length - 1 && <hr className="my-2 border-t border-gray-300" />} {/* Ligne de séparation */}
           </div>
         ))}
       </div>
       {selectedVideo && (
-        <div className="selected-video-preview">
-          <img src={selectedVideo.thumbnail} alt={selectedVideo.title} />
+        <div className="selected-video-preview mt-4">
+          
           <iframe
-            width="200"
-            height="113"
+            width="100%"
+            height="auto"
             title={`Video: ${selectedVideo.title}`}
             src={`https://www.youtube.com/embed/${selectedVideo.videoId}`}
             frameBorder="0"
@@ -145,10 +172,14 @@ function NfcAssociation() {
           <PlayVideoButton youtubeUrl={`https://www.youtube.com/watch?v=${selectedVideo.videoId}`} onLog={pageLog} />
         </div>
       )}
-      <button onClick={saveAssociation}>Enregistrer l'association</button>
-      {/* Inclure le composant LogDisplay pour afficher les messages */}
-      <LogDisplay messages={messages} />
-      {/* Inclure le composant AssociationsList pour afficher les associations */}
+      <Button 
+        onClick={saveAssociation} 
+        className="mb-4" 
+        disabled={!nfcId || !selectedVideo} // Désactiver le bouton si nfcId est vide ou aucun élément sélectionné
+      >
+        Enregistrer l'association
+      </Button> {/* Ajout de padding en bas */}
+
       <AssociationsList associations={associations} onLog={pageLog} />
     </div>
   );
