@@ -1,0 +1,15 @@
+# installation sur jeedom
+npm install -g pm2
+
+cd frontend
+pm2 start yarn --name frontend -- dev
+cd ..
+
+cd backend
+pm2 start server.js --name backend --node-args="--openssl-legacy-provider"
+cd ..
+
+pm2 startup
+pm2 save
+
+pm2 logs

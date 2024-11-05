@@ -40,7 +40,7 @@ module.exports = {
         https: true,
         historyApiFallback: true,
         static: path.join(__dirname, 'dist'),
-        port: 3000,
+        port: process.env.REACT_APP_FRONTEND_PORT,
     },
     mode: 'development', // Changez en 'production' pour la version finale
 };

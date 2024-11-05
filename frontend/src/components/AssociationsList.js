@@ -1,79 +1,99 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
-import PlayVideoButton from './PlayVideoButton'; // Importer le composant PlayVideoButton
+import PlayVideoButton from './PlayVideoButton';
 
-const AssociationsList = () => {
-  const BACKEND_URL = process.env.REACT_APP_SERVER_HOST+":"+process.env.REACT_APP_BACKEND_PORT;
-  const [associations, setAssociations] = useState([]);
-  /*
-  // Configurer Axios pour ignorer les erreurs de certificat
-  const agent = new https.Agent({  
-    rejectUnauthorized: false // Ignorer les erreurs de certificat
-  });
-  */
+function AssociationsList({ associations, onLog, onAssociationsChange, onEditTag }) {
+  const [selectedAssociation, setSelectedAssociation] = useState(null);
+  const BACKEND_URL = process.env.REACT_APP_SERVER_HOST + ":" + process.env.REACT_APP_BACKEND_PORT;
 
-  useEffect(() => {
-    const fetchAssociations = async () => {
-      try {
-        const response = await axios.get(BACKEND_URL+'/get-associations');  // Assurez-vous que l'URL est correcte
-        setAssociations(response.data);
-      } catch (error) {
-        console.error('Error fetching associations:', error);
-      }
-    };
-
-    fetchAssociations();
-  }, []);
-
-  const deleteAssociation = async (nfcId) => {
-    // Demander une confirmation avant de supprimer
-    const confirmDelete = window.confirm('Êtes-vous sûr de vouloir supprimer cette association ?');
-    if (!confirmDelete) {
-      return; // Annuler la suppression si l'utilisateur ne confirme pas
-    }
-
+  const handlePlay = async (association) => {
     try {
-      await axios.delete(BACKEND_URL+`/delete-association/${nfcId}`);  // Assurez-vous que l'URL est correcte
-      setAssociations(associations.filter(association => association.nfcId !== nfcId));
+      const response = await axios.get(`${BACKEND_URL}/lms-play-nfc/${association.nfcId}`);
+      onLog(`Lecture de ${association.title}`);
     } catch (error) {
-      console.error('Error deleting association:', error);
+      console.error('Erreur lors de la lecture:', error);
+      onLog(`Erreur lors de la lecture de ${association.title}`);
     }
   };
 
-  if (!associations.length) {
-    return <p>No associations available.</p>;
-  }
+  const handleDelete = async (nfcId) => {
+    try {
+      await axios.delete(`${BACKEND_URL}/delete-association/${nfcId}`);
+      onLog(`Association avec NFC ID ${nfcId} supprimée`);
+      onAssociationsChange();
+    } catch (error) {
+      console.error('Erreur lors de la suppression:', error);
+      onLog(`Erreur lors de la suppression de l'association avec NFC ID ${nfcId}`);
+    }
+  };
+
+  const handleSelect = (association) => {
+    setSelectedAssociation(association === selectedAssociation ? null : association);
+  };
 
   return (
-    <div className="space-y-4"> {/* Espacement entre les éléments */}
-      {associations.map((association) => (
-        <div key={association.nfcId} className="flex items-center p-4 border border-gray-300 rounded-lg shadow-md"> {/* Conteneur flex */}
-          <div className="mr-4"> {/* Espacement à droite */}
-            <a href={association.youtubeUrl} target="_blank" rel="noopener noreferrer">
-              <img
-                src={association.thumbnailUrl || `https://img.youtube.com/vi/${association.youtubeUrl.split('v=')[1]}/default.jpg`} // Utiliser l'URL de la miniature
-                alt={association.videoTitle ? association.videoTitle : `Thumbnail for ${association.nfcId}`}
-                className="w-32 h-18 object-cover" // Taille de l'image
-              />
-            </a>
-            <div className="flex items-baseline mt-2 justify-center">
-              <PlayVideoButton youtubeUrl={association.youtubeUrl} onLog={(message) => console.log(message)} />
-              <button onClick={() => deleteAssociation(association.nfcId)} className="ml-3 mt-2 text-red-500 hover:underline">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                </svg>
-              </button>
+    <div className="mt-4 w-full max-w-4xl">
+      <h2 className="text-xl font-bold mb-2">Associations enregistrées</h2>
+      <ul className="space-y-4">
+        {associations.map((association) => (
+          <li key={association.nfcId} className="border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow duration-200">
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="font-semibold">NFC ID:</span> {association.nfcId}
+                <br />
+                <span className="font-semibold">Type:</span> {association.mediaType}
+                <br />
+                <span className="font-semibold">Titre:</span> {association.title}
+              </div>
+              <div className="space-x-2">
+                {association.mediaType === 'youtube' ? (
+                  <PlayVideoButton youtubeUrl={association.media} onLog={onLog} />
+                ) : (
+                  <button
+                    onClick={() => handlePlay(association)}
+                    className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 transition-colors duration-200"
+                  >
+                    Jouer
+                  </button>
+                )}
+                <button
+                  onClick={() => handleDelete(association.nfcId)}
+                  className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition-colors duration-200"
+                >
+                  Supprimer
+                </button>
+                <button
+                  onClick={() => handleSelect(association)}
+                  className="bg-gray-200 text-gray-800 px-3 py-1 rounded hover:bg-gray-300 transition-colors duration-200"
+                >
+                  {selectedAssociation === association ? 'Masquer' : 'Aperçu'}
+                </button>
+                <button
+                  onClick={() => onEditTag(association.nfcId)}
+                  className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 transition-colors duration-200"
+                >
+                  Modifier tag
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="flex-1 items-start"> {/* Prendre tout l'espace restant */}
-            <p className="font-semibold">{association.videoTitle ? association.videoTitle : 'No title available'}</p>
-            <p>{association.nfcId}</p> {/* Afficher le tag NFC */}
-            <p><a href={association.youtubeUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">{association.youtubeUrl}</a></p>
-          </div>
-        </div>
-      ))}
+            {selectedAssociation === association && association.mediaType === 'youtube' && (
+              <div className="mt-4">
+                <iframe
+                  width="100%"
+                  height="315"
+                  src={`https://www.youtube.com/embed/${association.media.split('v=')[1]}`}
+                  title={association.title}
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                ></iframe>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
-};
+}
 
 export default AssociationsList;
