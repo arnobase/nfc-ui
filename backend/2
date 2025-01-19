@@ -1,0 +1,35 @@
+{
+  key: <Buffer 2d 2d 2d 2d 2d 42 45 47 49 4e 20 50 52 49 56 41 54 45 20 4b 45 59 2d 2d 2d 2d 2d 0a 4d 49 49 45 76 67 49 42 41 44 41 4e 42 67 6b 71 68 6b 69 47 39 77 ... 1654 more bytes>,
+  cert: <Buffer 2d 2d 2d 2d 2d 42 45 47 49 4e 20 43 45 52 54 49 46 49 43 41 54 45 2d 2d 2d 2d 2d 0a 4d 49 49 44 36 7a 43 43 41 74 4f 67 41 77 49 42 41 67 49 55 46 4f ... 1369 more bytes>
+}
+Base de données SQLite située à : /opt/nfc-ui/backend/database.sqlite
+Serveur en cours d'exécution sur https://https://192.168.1.45:3001
+🔍 Requête reçue: {
+  method: 'GET',
+  url: '/get-associations',
+  originalUrl: '/get-associations',
+  path: '/get-associations',
+  timestamp: '2025-01-17T20:48:30.439Z'
+}
+Client connecté
+🔍 Requête reçue: {
+  method: 'GET',
+  url: '/get-readings',
+  originalUrl: '/get-readings',
+  path: '/get-readings',
+  timestamp: '2025-01-17T20:48:30.445Z'
+}
+🔍 Requête reçue: {
+  method: 'GET',
+  url: '/get-associations',
+  originalUrl: '/get-associations',
+  path: '/get-associations',
+  timestamp: '2025-01-17T20:48:30.447Z'
+}
+🔍 Requête reçue: {
+  method: 'GET',
+  url: '/get-readings',
+  originalUrl: '/get-readings',
+  path: '/get-readings',
+  timestamp: '2025-01-17T20:48:30.448Z'
+}

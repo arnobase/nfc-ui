@@ -22,9 +22,8 @@ function FileUploader({ onUploadSuccess, onFileSelect }) {
 
     const formData = new FormData();
     formData.append('file', selectedFile);
-    if (rename) {
-      formData.append('rename', rename);
-    }
+    const finalFilename = rename || selectedFile.name;
+    formData.append('rename', finalFilename);
 
     try {
       const response = await axios.post(`${BACKEND_URL}/lms-upload-file`, formData, {
@@ -33,7 +32,12 @@ function FileUploader({ onUploadSuccess, onFileSelect }) {
         }
       });
       console.log('Fichier téléchargé avec succès:', response.data);
-      onUploadSuccess(response.data);
+      onUploadSuccess({
+        ...response.data,
+        filename: finalFilename
+      });
+      setSelectedFile(null);
+      setRename('');
     } catch (error) {
       console.error('Erreur lors du téléchargement du fichier:', error);
     }

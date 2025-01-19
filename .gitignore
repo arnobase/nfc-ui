@@ -3,3 +3,4 @@
 /.env
 backend/database.sqlite
 backend/uploads/
+/frontend/build

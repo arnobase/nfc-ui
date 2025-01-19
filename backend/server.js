@@ -27,6 +27,19 @@ console.log(options);
 // Utiliser le middleware CORS
 app.use(cors());  // Utiliser le middleware CORS
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// Ajouter un middleware de logging général avant tout
+app.use((req, res, next) => {
+    console.log('🔍 Requête reçue:', {
+        method: req.method,
+        url: req.url,
+        originalUrl: req.originalUrl,
+        path: req.path,
+        timestamp: new Date().toISOString()
+    });
+    next();
+});
 
 // Créer un serveur HTTPS
 const server = https.createServer(options, app);
@@ -43,15 +56,47 @@ wss.on('connection', (ws) => {
     });
 });
 
-// Proxifier les requêtes vers le serveur LMS
-app.use('/lms', createProxyMiddleware({
-    target: process.env.REACT_APP_LMS_HOST + ":" + process.env.REACT_APP_LMS_PORT,
-    changeOrigin: true,
-    pathRewrite: {
-        '^/lms': '', // Supprimer le préfixe /lms de l'URL
-    },
-    secure: false, // Ignorer les erreurs de certificat SSL
-}));
+// Remplacer la configuration du proxy par une route dédiée
+app.post('/lms/*', async (req, res) => {
+    const targetPath = req.path.replace('/lms', '');
+    const targetUrl = `${process.env.REACT_APP_LMS_HOST}:${process.env.REACT_APP_LMS_PORT}${targetPath}`;
+
+    console.log('🎯 Requête LMS:', {
+        targetUrl,
+        method: req.method,
+        body: req.body,
+        headers: req.headers
+    });
+
+    try {
+        const response = await axios({
+            method: req.method,
+            url: targetUrl,
+            data: req.body,
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        });
+
+        console.log('✅ Réponse LMS:', {
+            status: response.status,
+            data: response.data
+        });
+
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error('❌ Erreur LMS:', {
+            message: error.message,
+            response: error.response?.data,
+            targetUrl
+        });
+        res.status(error.response?.status || 500).json({
+            error: error.message,
+            details: error.response?.data
+        });
+    }
+});
 
 // Connexion à SQLite (utilisation d'un fichier de base de données persistant)
 const dbPath = path.join(__dirname, 'database.sqlite');
@@ -115,28 +160,59 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Route pour enregistrer ou mettre à jour l'association
 app.post('/save-association', async (req, res) => {
-    const { nfcId, media, mediaType } = req.body;
+    const { nfcId, media, mediaType, title } = req.body;
+
+    console.log('Headers reçus:', req.headers);
+    console.log('Body complet reçu:', req.body);
 
     if (!nfcId || !media || !mediaType) {
         return res.status(400).json({ error: 'nfcId, media et mediaType sont requis' });
     }
 
-    console.log(req.body);
+    // S'assurer que le titre n'est pas undefined ou null
+    const finalTitle = title || media;
 
-    let title = '';
-    if (mediaType === 'youtube') {
-        title = await getYouTubeVideoTitle(media);
-    } else {
-        title = media; // Pour les fichiers, utilisez le nom du fichier comme titre
-    }
+    console.log('Données à sauvegarder:', {
+        nfcId,
+        media,
+        mediaType,
+        title: finalTitle
+    });
 
     // Utiliser INSERT OR REPLACE pour insérer ou mettre à jour
-    db.run(`INSERT OR REPLACE INTO associations (nfcId, media, mediaType, title) VALUES (?, ?, ?, ?)`, [nfcId, media, mediaType, title], (err) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
+    db.run(
+        `INSERT OR REPLACE INTO associations (nfcId, media, mediaType, title) VALUES (?, ?, ?, ?)`, 
+        [nfcId, media, mediaType, finalTitle], 
+        function(err) {
+            if (err) {
+                console.error('Erreur SQL:', err);
+                return res.status(500).json({ error: err.message });
+            }
+            
+            // Vérifier que l'insertion s'est bien passée
+            db.get(
+                'SELECT * FROM associations WHERE nfcId = ?',
+                [nfcId],
+                (err, row) => {
+                    if (err) {
+                        console.error('Erreur de vérification:', err);
+                        return res.status(500).json({ error: err.message });
+                    }
+                    
+                    if (!row) {
+                        console.error('Aucune ligne trouvée après insertion');
+                        return res.status(500).json({ error: 'Échec de l\'insertion' });
+                    }
+                    
+                    console.log('Association sauvegardée en base:', row);
+                    res.status(201).json({ 
+                        message: 'Association saved or updated successfully',
+                        title: row.title
+                    });
+                }
+            );
         }
-        res.status(201).json({ message: 'Association saved or updated successfully' });
-    });
+    );
 });
 
 // Endpoint to get associations
@@ -166,72 +242,141 @@ app.delete('/delete-association/:nfcId', (req, res) => {
 });
 
 // Route pour jouer une vidéo sur le périphérique distant
-app.get('/lms-play', (req, res) => {
-    const content = req.query.content; // Récupérer le paramètre content de la requête
+app.get('/lms-play', async (req, res) => {
+    console.log("play");
+    const content = req.query.content;
 
     if (!content) {
         return res.status(400).json({ error: 'Le paramètre content est requis.' });
     }
 
-    // Construire l'URL pour le proxy
-    //req.url = `/lms/anyurl?p0=playlist&p1=play&p2=${encodeURIComponent(content)}`; // Modifier l'URL de la requête
-    req.url = `/lms/anyurl?p0=playlist&p1=play&p2=${encodeURIComponent(content)}`
-    // Appeler le middleware de proxy existant
-    // Note: Le middleware de proxy pour /lms doit déjà être configuré
-    // Passer la requête et la réponse au middleware de proxy existant
-    app._router.handle(req, res, () => {
-        res.status(404).send('Not Found');
-    });
+    try {
+        const response = await axios.post(
+            `${process.env.REACT_APP_LMS_HOST}:${process.env.REACT_APP_LMS_PORT}/jsonrpc.js`,
+            {
+                id: 1,
+                method: "slim.request",
+                params: [
+                    process.env.REACT_APP_LMS_PLAYER_MAC,
+                    ["playlist", "play", content]
+                ]
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            }
+        );
+
+        res.json(response.data);
+    } catch (error) {
+        console.error('Erreur LMS:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // Route pour jouer une vidéo sur le périphérique distant en utilisant nfcId
-app.get('/lms-play-nfc/:nfcId', (req, res) => {
-    const nfcId = req.params.nfcId; // Récupérer le nfcId de la requête
-    console.log(req.params.nfcId);
-    // Requête pour récupérer l'URL de la vidéo à partir de la base de données
-    db.get('SELECT media, mediaType, title FROM associations WHERE nfcId = ?', [nfcId], (err, row) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
+app.get('/lms-play-nfc/:nfcId', async (req, res) => {
+    const nfcId = req.params.nfcId;
+    
+    try {
+        const row = await new Promise((resolve, reject) => {
+            db.get('SELECT media, mediaType, title FROM associations WHERE nfcId = ?', [nfcId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
         if (!row) {
             return res.status(404).json({ error: 'Association non trouvée pour ce nfcId.' });
         }
 
-        const mediaUrl = row.media; // Récupérer l'URL de la vidéo
-        const mediaType = row.mediaType;
-        const title = row.title;
-        
-        // Rediriger vers /lms-play avec le paramètre content
-        //res.redirect(`${host}:${port}/lms-play?content=${encodeURIComponent(mediaUrl)}`);
-
-
-        // Construire l'URL pour le proxy
-        //req.url = `/lms/anyurl?p0=playlist&p1=play&p2=${encodeURIComponent(content)}`; // Modifier l'URL de la requête
-        console.log(`appel de l'URL : ${mediaUrl} `)
-        if (mediaType === "file") {
-            //anyurl?p0=playlist&p1=play&p2=file%3A%2F%2F%2Fmnt%2Fusb64%2Fupload%2Fcomptine-il-pleut-il-mouille-c-est-la-fete-a-la-grenouille-voix.mp3
-            const filePath = `file:///mnt/usb64/upload/${row.media}`;
-            req.url = `/lms/anyurl?p0=playlist&p1=play&p2=${encodeURIComponent(filePath)}`
+        let command;
+        if (row.mediaType === "file") {
+            const mediaUrl = `file:///mnt/usb64/upload/${row.media}`;
+            command = ["playlist", "play", mediaUrl];
+        } else if (row.media.startsWith('albumid:')) {
+            const albumId = row.media.replace('albumid:', '');
+            command = ["playlistcontrol", "cmd:load", `album_id:${albumId}`];
+        } else if (row.media.startsWith('trackid:')) {
+            const trackId = row.media.replace('trackid:', '');
+            command = ["playlistcontrol", "cmd:load", `track_id:${trackId}`];
+        } else if (row.media.startsWith('playlistid:')) {
+            const playlistId = row.media.replace('playlistid:', '');
+            command = ["playlistcontrol", "cmd:load", `playlist_id:${playlistId}`];
+        } else {
+            command = ["playlist", "play", row.media];
         }
-        else req.url = `/lms/anyurl?p0=playlist&p1=play&p2=${encodeURIComponent(mediaUrl)}`
-        app._router.handle(req, res, () => {
-            res.status(404).send('Not Found');
-        });
-        console.log(`requête de lecture envoyée : ${title} `)
 
-        /*
-        // Construire l'URL pour le proxy
-        //req.url = `/lms/anyurl?p0=playlist&p1=play&p2=${encodeURIComponent(content)}`; // Modifier l'URL de la requête
-        req.url = `/lms-play?content=${encodeURIComponent(mediaUrl)}`
-        // Appeler le middleware de proxy existant
-        // Note: Le middleware de proxy pour /lms doit déjà être configuré
-        // Passer la requête et la réponse au middleware de proxy existant
-        app._router.handle(req, res, () => {
-            res.status(404).send('Not Found');
-        });
-        */
+        const requestBody = {
+            id: 0,
+            method: "slim.request",
+            params: [
+                process.env.REACT_APP_LMS_PLAYER_MAC,
+                command
+            ]
+        };
 
-    });
+        // Log détaillé de la requête
+        console.log('Envoi de la requête à LMS:', {
+            url: `${process.env.REACT_APP_LMS_HOST}:${process.env.REACT_APP_LMS_PORT}/jsonrpc.js`,
+            body: requestBody,
+            player_mac: process.env.REACT_APP_LMS_PLAYER_MAC
+        });
+
+        // Log de la commande curl équivalente pour debug manuel
+        console.log('📟 Commande curl équivalente:');
+        console.log(`curl --location '${process.env.REACT_APP_LMS_HOST}:${process.env.REACT_APP_LMS_PORT}/jsonrpc.js' \\
+  --header 'Content-Type: application/json' \\
+  --data '${JSON.stringify(requestBody)}'`);
+
+        // Appeler le serveur LMS
+        const response = await axios.post(
+            `${process.env.REACT_APP_LMS_HOST}:${process.env.REACT_APP_LMS_PORT}/jsonrpc.js`,
+            requestBody,
+            {
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        // Enregistrer la lecture dans l'historique
+        db.run(`INSERT INTO readings (nfcId, title) VALUES (?, ?)`, [nfcId, row.title], (err) => {
+            if (err) {
+                console.error('Erreur lors de l\'enregistrement de la lecture:', err.message);
+            }
+            emitReadingUpdate(nfcId, row.title);
+        });
+
+        console.log(`Lecture lancée : ${row.title}`);
+        console.log('Réponse de LMS:', response.data);
+        res.json({ success: true, message: 'Lecture lancée', title: row.title });
+
+    } catch (error) {
+        console.error('Erreur détaillée:', {
+            message: error.message,
+            code: error.code,
+            config: error.config,
+            response: error.response?.data
+        });
+
+        // Gérer les différents types d'erreurs
+        if (error.code === 'ECONNREFUSED') {
+            return res.status(503).json({ error: 'Le serveur LMS est inaccessible' });
+        } else if (error.code === 'ECONNRESET') {
+            return res.status(503).json({ error: 'La connexion au serveur LMS a été réinitialisée' });
+        } else if (error.code === 'ETIMEDOUT') {
+            return res.status(504).json({ error: 'Timeout de la connexion au serveur LMS' });
+        }
+
+        res.status(500).json({ 
+            error: 'Erreur lors de la lecture',
+            details: error.message,
+            code: error.code
+        });
+    }
 });
 
 // Fonction pour émettre un message à tous les clients connectés

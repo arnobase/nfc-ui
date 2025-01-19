@@ -8,6 +8,7 @@ import axios from 'axios';
 import Button from './Button';
 import Tabs from './Tabs'; // Importer le composant Tabs
 import ReadingsList from './ReadingsList'; // Importer le composant ReadingsList
+import LMSSearch from './LMSSearch';
 
 function NfcAssociation() {
   const [nfcId, setNfcId] = useState('');
@@ -116,33 +117,72 @@ function NfcAssociation() {
     setMessages((prevMessages) => prevMessages + message + '\n');
   };
 
-  const saveAssociation = async () => {
-    if (!selectedMedia) return;
+  const handleMediaSelect = (mediaInfo) => {
+    console.log('MediaInfo reçu dans NfcAssociation:', mediaInfo);
+    
+    // Vérifier que toutes les propriétés sont présentes
+    if (!mediaInfo.title) {
+        console.error('Titre manquant dans mediaInfo:', mediaInfo);
+    }
+    
+    const selectedMediaData = {
+        media: mediaInfo.media,
+        mediaType: mediaInfo.mediaType,
+        title: mediaInfo.title  // S'assurer que le titre est bien passé
+    };
+    
+    console.log('Data à sauvegarder dans state:', selectedMediaData);
+    setSelectedMedia(selectedMediaData);
+  };
 
-    const associationData = {
-      nfcId,
-      media: selectedMedia.media,
-      mediaType: selectedMedia.type
+  const handleSave = async () => {
+    if (!nfcId || !selectedMedia) return;
+
+    // Vérifier que le titre est présent
+    if (!selectedMedia.title) {
+        console.error('Titre manquant dans selectedMedia:', selectedMedia);
+        return;
+    }
+
+    const dataToSend = {
+        nfcId,
+        media: selectedMedia.media,
+        mediaType: selectedMedia.mediaType,
+        title: selectedMedia.title
     };
 
+    console.log('Données à envoyer à /save-association:', dataToSend);
+
     try {
-      const response = await fetch(BACKEND_URL + '/save-association', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(associationData)
-      });
-      const data = await response.json();
-      console.log('Association enregistrée:', data);
+        const response = await axios.post(
+            `${process.env.REACT_APP_SERVER_HOST}:${process.env.REACT_APP_BACKEND_PORT}/save-association`,
+            dataToSend
+        );
 
-      setNfcId('');
-      setSelectedMedia(null);
-      setExistingTitle('');
+        console.log('Réponse de /save-association:', response.data);
 
-      await fetchAssociations();
+        // Vérifier que le titre a été correctement sauvegardé
+        if (response.data.title !== selectedMedia.title) {
+            console.error('Titre non sauvegardé correctement:', {
+                envoyé: selectedMedia.title,
+                reçu: response.data.title
+            });
+        }
+
+        // Réinitialiser le formulaire
+        setNfcId('');
+        setSelectedMedia(null);
+        setExistingTitle('');
+
+        // Rafraîchir la liste des associations
+        await fetchAssociations();
+
+        // Afficher un message de confirmation
+        pageLog(`Association ${nfcId} enregistrée avec succès`);
+
     } catch (error) {
-      console.log('Erreur:', error);
+        console.error('Erreur lors de la sauvegarde:', error);
+        pageLog(`Erreur lors de l'enregistrement de l'association: ${error.message}`);
     }
   };
 
@@ -152,6 +192,16 @@ function NfcAssociation() {
       media: file.name,
       title: file.name
     });
+  };
+
+  const handleUploadSuccess = (uploadData) => {
+    console.log('Upload success data:', uploadData);
+    setSelectedMedia({
+      type: 'file',
+      media: uploadData.filename,
+      title: uploadData.filename
+    });
+    pageLog(`Fichier téléchargé: ${uploadData.message}`);
   };
 
   const handleVideoSelect = (video) => {
@@ -262,6 +312,12 @@ function NfcAssociation() {
         >
           Envoyer un fichier
         </button>
+        <button
+          onClick={() => setActiveTab('lms')}
+          className={`px-4 py-2 rounded ${activeTab === 'lms' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'}`}
+        >
+          Recherche LMS
+        </button>
       </div>
 
       <div className="w-full max-w-md mt-4 p-4 border rounded-lg shadow-sm">
@@ -271,9 +327,13 @@ function NfcAssociation() {
 
         {activeTab === 'file' && (
           <FileUploader 
-            onUploadSuccess={(data) => pageLog(`Fichier téléchargé: ${data.message}`)} 
+            onUploadSuccess={handleUploadSuccess} 
             onFileSelect={handleFileSelect}
           />
+        )}
+
+        {activeTab === 'lms' && (
+          <LMSSearch onMediaSelect={setSelectedMedia} />
         )}
       </div>
 
@@ -282,7 +342,7 @@ function NfcAssociation() {
       )}
 
       <Button
-        onClick={saveAssociation}
+        onClick={handleSave}
         className="mb-4"
         disabled={!nfcId || !selectedMedia}
       >

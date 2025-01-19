@@ -15,3 +15,11 @@ pm2 save
 pm2 logs
 
 https://github.com/arnobase/nfc-ui
+
+
+## install du Service
+sudo cp webapps.service /etc/systemd/system/
+chmod +x start-servers.sh
+sudo systemctl daemon-reload
+sudo systemctl enable webapps
+sudo systemctl start webapps

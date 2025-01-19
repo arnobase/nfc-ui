@@ -1,0 +1,21 @@
+[Unit]
+Description=Frontend and Backend Web Services
+After=network.target
+
+[Service]
+Type=simple
+User=arno
+WorkingDirectory=/opt/nfc-ui
+ExecStart=/opt/nfc-ui/start-servers.sh
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=always
+RestartSec=10
+TimeoutStartSec=15
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/arno/.local/bin:/home/arno/.yarn/bin
+Environment=NODE_ENV=production
+Environment=HOME=/home/arno
+StandardOutput=append:/var/log/nfc-ui.log
+StandardError=append:/var/log/nfc-ui.log
+
+[Install]
+WantedBy=multi-user.target 
