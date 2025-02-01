@@ -147,7 +147,7 @@ function NfcAssociation() {
     const dataToSend = {
         nfcId,
         media: selectedMedia.media,
-        mediaType: selectedMedia.mediaType,
+        mediaType: selectedMedia.type,  // Utiliser 'type' comme mediaType
         title: selectedMedia.title
     };
 
@@ -206,7 +206,7 @@ function NfcAssociation() {
 
   const handleVideoSelect = (video) => {
     setSelectedMedia({
-      type: 'youtube',
+      type: 'youtube',  // On garde 'type' pour être cohérent
       media: `https://www.youtube.com/watch?v=${video.videoId}`,
       title: video.title
     });
