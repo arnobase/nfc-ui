@@ -18,8 +18,8 @@ const app = express();
 
 // Charger le certificat et la clé
 const options = {
-    key: fs.readFileSync(path.join(__dirname, 'server.key')), // Chemin vers votre fichier de clé
-    cert: fs.readFileSync(path.join(__dirname, 'server.cert')) // Chemin vers votre fichier de certificat
+    key: fs.readFileSync('/etc/letsencrypt/live/nfcui.gardies.fr/privkey.pem'),
+    cert: fs.readFileSync('/etc/letsencrypt/live/nfcui.gardies.fr/fullchain.pem')
 };
 
 console.log(options);
@@ -289,7 +289,20 @@ app.get('/lms-play-nfc/:nfcId', async (req, res) => {
         });
 
         if (!row) {
-            return res.status(404).json({ error: 'Association non trouvée pour ce nfcId.' });
+            const defaultTitle = `Tag inconnu (${nfcId})`;
+            // Enregistrer la lecture dans l'historique avec le titre par défaut
+            db.run(`INSERT INTO readings (nfcId, title) VALUES (?, ?)`, [nfcId, defaultTitle], (err) => {
+                if (err) {
+                    console.error('Erreur lors de l\'enregistrement de la lecture:', err.message);
+                }
+                // Émettre un message WebSocket pour le tag inconnu
+                emitReadingUpdate(nfcId, defaultTitle);
+            });
+            
+            return res.status(404).json({ 
+                error: 'Association non trouvée pour ce nfcId.',
+                title: defaultTitle 
+            });
         }
 
         let command;
@@ -455,7 +468,7 @@ app.post('/lms-upload-file', upload.single('file'), (req, res) => {
     const client = new SambaClient({
         address: `${process.env.REACT_APP_SAMBA_SHARE}`,
         username: 'tc',
-        password: 'tcpassword',
+        password: 'tc',
         domain: 'WORKGROUP',
     });
 
